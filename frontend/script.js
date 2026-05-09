@@ -1,0 +1,478 @@
+const API_URL = '/api';
+
+let authToken = null;
+let currentUser = null;
+
+// ---------- Helper: Toast Notifications ----------
+function showToast(message, type = 'success') {
+  let toast = document.getElementById('customToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'customToast';
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.right = '20px';
+    toast.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+    toast.style.color = 'white';
+    toast.style.padding = '12px 24px';
+    toast.style.borderRadius = '40px';
+    toast.style.fontWeight = '500';
+    toast.style.fontSize = '14px';
+    toast.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.1)';
+    toast.style.zIndex = '2000';
+    toast.style.animation = 'fadeInUp 0.3s ease';
+    document.body.appendChild(toast);
+  }
+  toast.innerText = message;
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 3000);
+}
+
+// ---------- Modal Helpers ----------
+function openModal(title, bodyHtml, onConfirm) {
+  const overlay = document.getElementById('modalOverlay');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  modalTitle.innerText = title;
+  modalBody.innerHTML = bodyHtml;
+  overlay.style.display = 'flex';
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  if (confirmBtn) {
+    confirmBtn.onclick = () => {
+      if (onConfirm) onConfirm();
+      closeModal();
+    };
+  }
+  const cancelBtn = document.getElementById('modalCancelBtn');
+  if (cancelBtn) cancelBtn.onclick = closeModal;
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+// ---------- API Call ----------
+async function apiCall(endpoint, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || 'Request failed');
+  }
+  return res.json();
+}
+
+// ---------- Helper: Escape HTML ----------
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
+// ---------- Auth UI ----------
+const authScreen = document.getElementById('auth-screen');
+const mainApp = document.getElementById('main-app');
+const loginForm = document.getElementById('login-form');
+const signupForm = document.getElementById('signup-form');
+const authError = document.getElementById('auth-error');
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    loginForm.style.display = tab === 'login' ? 'block' : 'none';
+    signupForm.style.display = tab === 'signup' ? 'block' : 'none';
+    authError.innerText = '';
+  });
+});
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  try {
+    const data = await apiCall('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('token', authToken);
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    showMainApp();
+  } catch (err) {
+    authError.innerText = err.message;
+  }
+});
+
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('signup-name').value;
+  const email = document.getElementById('signup-email').value;
+  const password = document.getElementById('signup-password').value;
+  try {
+    await apiCall('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password })
+    });
+    const data = await apiCall('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
+    authToken = data.token;
+    currentUser = data.user;
+    localStorage.setItem('token', authToken);
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    showMainApp();
+  } catch (err) {
+    authError.innerText = err.message;
+  }
+});
+
+function showMainApp() {
+  authScreen.style.display = 'none';
+  mainApp.style.display = 'flex';
+  loadDashboard();
+  attachNavEvents();
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+  const darkToggle = document.getElementById('darkModeToggle');
+  darkToggle.addEventListener('change', () => {
+    document.body.classList.toggle('dark', darkToggle.checked);
+    localStorage.setItem('darkMode', darkToggle.checked);
+  });
+  const savedDark = localStorage.getItem('darkMode') === 'true';
+  if (savedDark) {
+    darkToggle.checked = true;
+    document.body.classList.add('dark');
+  }
+}
+
+function logout() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  authScreen.style.display = 'flex';
+  mainApp.style.display = 'none';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('signup-name').value = '';
+  document.getElementById('signup-email').value = '';
+  document.getElementById('signup-password').value = '';
+}
+
+function attachNavEvents() {
+  document.querySelectorAll('nav a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const page = link.dataset.page;
+      document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+      link.classList.add('active');
+      if (page === 'dashboard') loadDashboard();
+      else if (page === 'projects') loadProjects();
+      else if (page === 'tasks') loadTasks();
+    });
+  });
+}
+
+// ---------- Dashboard (with cache-bust & refresh button) ----------
+async function loadDashboard() {
+  const container = document.getElementById('page-content');
+  container.innerHTML = '<div class="card">Loading dashboard...</div>';
+  try {
+    // Add a timestamp to avoid caching
+    const data = await apiCall('/dashboard?_=' + Date.now());
+    const { totalTasks, byStatus, perUser, overdue } = data;
+    container.innerHTML = `
+      <h2>Dashboard</h2>
+      <div class="dashboard-stats">
+        <div class="stat-card"><h3>${totalTasks}</h3><p>Total Tasks</p></div>
+        <div class="stat-card"><h3>${byStatus['To Do'] || 0}</h3><p>To Do</p></div>
+        <div class="stat-card"><h3>${byStatus['In Progress'] || 0}</h3><p>In Progress</p></div>
+        <div class="stat-card"><h3>${byStatus['Done'] || 0}</h3><p>Done</p></div>
+      </div>
+      <div class="card">
+        <h3>Tasks per User</h3>
+        <ul>${perUser.map(u => `<li>${escapeHtml(u.user)}: ${u.count} tasks</li>`).join('')}</ul>
+      </div>
+      <div class="card">
+        <h3>Overdue Tasks</h3>
+        ${overdue.length === 0 ? '<p>None 🎉</p>' : overdue.map(t => `<div class="task-card overdue-task"><strong>${escapeHtml(t.title)}</strong> - Due ${new Date(t.dueDate).toLocaleDateString()}</div>`).join('')}
+      </div>
+      <div style="text-align: center; margin-top: 2rem;">
+        <button class="btn-secondary" onclick="loadDashboard()">⟳ Refresh Dashboard</button>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div class="card error">Error: ${err.message}</div>`;
+  }
+}
+
+// ---------- Professional Project Cards ----------
+async function loadProjects() {
+  const container = document.getElementById('page-content');
+  container.innerHTML = '<div class="loading-spinner">Loading projects...</div>';
+  try {
+    const projects = await apiCall('/projects');
+    if (projects.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 3rem;">
+          <p>No projects yet. Click "New Project" to get started.</p>
+          <button class="btn-primary" onclick="showCreateProjectModal()">+ New Project</button>
+        </div>
+      `;
+      return;
+    }
+
+    let html = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+        <h2 style="margin:0">Projects</h2>
+        <button class="btn-primary" onclick="showCreateProjectModal()">+ New Project</button>
+      </div>
+      <div class="project-grid">
+    `;
+
+    for (const p of projects) {
+      const members = await apiCall(`/projects/${p.id}/members`);
+      const adminMember = members.find(m => m.role === 'Admin');
+      const otherMembers = members.filter(m => m.role !== 'Admin');
+      const currentUserIsAdmin = members.some(m => m.userId === currentUser?.id && m.role === 'Admin');
+
+      html += `
+        <div class="project-card">
+          <div class="project-header">
+            <h3>${escapeHtml(p.name)}</h3>
+            ${currentUserIsAdmin ? `<button class="delete-project-btn" data-id="${p.id}" title="Delete Project"><i class="fas fa-trash-alt"></i></button>` : ''}
+          </div>
+          <p class="project-desc">${p.description ? escapeHtml(p.description) : 'No description'}</p>
+          <div class="project-meta">
+            <span><i class="far fa-calendar-alt"></i> ${new Date(p.createdAt).toLocaleDateString()}</span>
+            <span><i class="fas fa-users"></i> ${members.length} member${members.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="project-admin">
+            <strong>Admin:</strong> ${escapeHtml(adminMember?.name || 'Unknown')}
+          </div>
+          ${otherMembers.length > 0 ? `
+            <div class="project-members">
+              <strong>Members (${otherMembers.length}):</strong>
+              <div class="member-chips">
+                ${otherMembers.map(m => `<span class="member-chip">${escapeHtml(m.name)}</span>`).join('')}
+              </div>
+            </div>
+          ` : '<div class="project-members"><em>No additional members</em></div>'}
+          <button class="btn-secondary add-member-btn" data-id="${p.id}">+ Add Member</button>
+        </div>
+      `;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+
+    // Attach add member click events
+    document.querySelectorAll('.add-member-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const projectId = parseInt(btn.dataset.id);
+        showAddMemberModal(projectId);
+      });
+    });
+    // Attach delete project click events
+    document.querySelectorAll('.delete-project-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const projectId = parseInt(btn.dataset.id);
+        if (confirm('Are you sure you want to delete this project? All tasks will be lost.')) {
+          try {
+            await apiCall(`/projects/${projectId}`, { method: 'DELETE' });
+            showToast('Project deleted successfully', 'success');
+            loadProjects(); // refresh
+            loadDashboard(); // update dashboard stats
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        }
+      });
+    });
+  } catch (err) {
+    container.innerHTML = `<div class="card error">Error: ${err.message}</div>`;
+  }
+}
+
+// ---------- Create Project Modal ----------
+window.showCreateProjectModal = function() {
+  const bodyHtml = `
+    <input type="text" id="projectName" placeholder="Project Name" required>
+    <textarea id="projectDesc" rows="3" placeholder="Description (optional)"></textarea>
+    <div class="modal-footer">
+      <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
+      <button class="btn-modal btn-primary" id="modalConfirmBtn">Create</button>
+    </div>
+  `;
+  openModal('Create New Project', bodyHtml, async () => {
+    const name = document.getElementById('projectName').value.trim();
+    if (!name) return showToast('Project name required', 'error');
+    const description = document.getElementById('projectDesc').value;
+    try {
+      await apiCall('/projects', { method: 'POST', body: JSON.stringify({ name, description }) });
+      showToast(`Project "${name}" created`, 'success');
+      loadProjects();
+      loadDashboard();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+};
+
+// ---------- Add Member Modal ----------
+window.showAddMemberModal = async function(projectId) {
+  let existingMembers = [];
+  try {
+    existingMembers = await apiCall(`/projects/${projectId}/members`);
+  } catch(e) { /* ignore */ }
+  const memberListHtml = existingMembers.map(m => `<li>${escapeHtml(m.name)} (${m.role})</li>`).join('');
+  const bodyHtml = `
+    <div style="max-height: 160px; overflow-y: auto; background: #f8fafc; padding: 10px; border-radius: 16px; margin-bottom: 1rem;">
+      <strong>Current Members:</strong>
+      <ul>${memberListHtml || '<li>No members yet</li>'}</ul>
+    </div>
+    <input type="email" id="memberEmail" placeholder="Member's Email" required>
+    <select id="memberRole" style="margin-top: 0.5rem; width:100%">
+      <option value="Member">Member</option>
+      <option value="Admin">Admin</option>
+    </select>
+    <div class="modal-footer">
+      <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
+      <button class="btn-modal btn-primary" id="modalConfirmBtn">Add Member</button>
+    </div>
+  `;
+  openModal('Add Team Member', bodyHtml, async () => {
+    const email = document.getElementById('memberEmail').value.trim();
+    const role = document.getElementById('memberRole').value;
+    if (!email) return showToast('Email is required', 'error');
+    try {
+      await apiCall(`/projects/${projectId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ email, role })
+      });
+      showToast(`${email} added as ${role}`, 'success');
+      loadProjects(); 
+      loadDashboard(); // dashbo
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+};
+
+// ---------- Tasks ----------
+async function loadTasks() {
+  const container = document.getElementById('page-content');
+  container.innerHTML = '<div class="card">Loading tasks...</div>';
+  try {
+    const tasks = await apiCall('/tasks');
+    const projects = await apiCall('/projects');
+    container.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>Tasks</h2>
+        <button class="btn-primary" onclick="showCreateTaskModal(${JSON.stringify(projects).replace(/"/g, '&quot;')})">+ New Task</button>
+      </div>
+      <div>
+        ${tasks.length === 0 ? '<p>No tasks yet.</p>' : tasks.map(t => `
+          <div class="task-card priority-${t.priority.toLowerCase()}">
+            <strong>${escapeHtml(t.title)}</strong> (${t.status})<br>
+            <small>Project: ${escapeHtml(t.project.name)} | Assigned to: ${escapeHtml(t.assignee.name)} | Due: ${new Date(t.dueDate).toLocaleDateString()}</small><br>
+            <select onchange="updateTaskStatus(${t.id}, this.value)">
+              <option ${t.status === 'To Do' ? 'selected' : ''}>To Do</option>
+              <option ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+              <option ${t.status === 'Done' ? 'selected' : ''}>Done</option>
+            </select>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    window.showCreateTaskModal = (projectsArr) => {
+      let options = '';
+      projectsArr.forEach(p => {
+        options += `<option value="${p.id}">${escapeHtml(p.name)} (ID: ${p.id})</option>`;
+      });
+      const bodyHtml = `
+        <select id="taskProjectId">${options}</select>
+        <input type="text" id="taskTitle" placeholder="Task Title" required>
+        <textarea id="taskDesc" rows="2" placeholder="Description"></textarea>
+        <input type="date" id="taskDueDate" required>
+        <select id="taskPriority">
+          <option value="Low">Low</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="High">High</option>
+        </select>
+        <input type="number" id="taskAssignedTo" placeholder="Assign to User ID (e.g., 1,2,3...)" required>
+        <div class="modal-footer">
+          <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
+          <button class="btn-modal btn-primary" id="modalConfirmBtn">Create Task</button>
+        </div>
+      `;
+      openModal('Create New Task', bodyHtml, async () => {
+        const projectId = document.getElementById('taskProjectId').value;
+        const title = document.getElementById('taskTitle').value.trim();
+        const description = document.getElementById('taskDesc').value;
+        const dueDate = document.getElementById('taskDueDate').value;
+        const priority = document.getElementById('taskPriority').value;
+        const assignedTo = parseInt(document.getElementById('taskAssignedTo').value);
+        if (!title || !dueDate || !assignedTo) {
+          return showToast('Please fill all required fields', 'error');
+        }
+        try {
+          await apiCall(`/tasks/project/${projectId}`, {
+            method: 'POST',
+            body: JSON.stringify({ title, description, dueDate, priority, assignedTo })
+          });
+          showToast('Task created successfully', 'success');
+          loadTasks();
+          loadDashboard();   // 🔄 Update dashboard stats
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    };
+    window.updateTaskStatus = async (taskId, newStatus) => {
+      try {
+        await apiCall(`/tasks/${taskId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: newStatus })
+        });
+        showToast(`Task status updated to ${newStatus}`, 'success');
+        loadTasks();
+        loadDashboard();     // 🔄 Force dashboard refresh
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+  } catch (err) {
+    container.innerHTML = `<div class="card error">Error: ${err.message}</div>`;
+  }
+}
+
+// ---------- Auto-Login ----------
+const savedToken = localStorage.getItem('token');
+const savedUser = localStorage.getItem('user');
+if (savedToken && savedUser) {
+  authToken = savedToken;
+  currentUser = JSON.parse(savedUser);
+  showMainApp();
+} else {
+  authScreen.style.display = 'flex';
+  mainApp.style.display = 'none';
+}
