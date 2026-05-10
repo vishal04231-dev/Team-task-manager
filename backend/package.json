@@ -1,11 +1,11 @@
-
 {
   "name": "team-task-manager-backend",
   "version": "1.0.0",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "build": "npx prisma generate"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
