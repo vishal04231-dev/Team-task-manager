@@ -1,7 +1,11 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd backend && npm install && npx prisma generate",
-    "startCommand": "cd backend && npm start"
+    "buildCommand": "npm install && npx prisma generate"
+  },
+  "deploy": {
+    "startCommand": "npm start",
+    "healthcheckPath": "/",
+    "restartPolicyType": "ON_FAILURE"
   }
 }
