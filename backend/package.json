@@ -5,8 +5,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-  "build": "node node_modules/prisma/build/index.js generate"
-    
+    "build": "prisma generate"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
