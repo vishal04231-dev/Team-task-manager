@@ -148,9 +148,19 @@ signupForm.addEventListener('submit', async (e) => {
 function showMainApp() {
   authScreen.style.display = 'none';
   mainApp.style.display = 'flex';
+
+  // Update user profile in sidebar
+  if (currentUser) {
+    const userNameSpan = document.getElementById('userName');
+    const userEmailSpan = document.getElementById('userEmail');
+    if (userNameSpan) userNameSpan.innerText = currentUser.name || 'User';
+    if (userEmailSpan) userEmailSpan.innerText = currentUser.email || '';
+  }
+
   loadDashboard();
   attachNavEvents();
   document.getElementById('logoutBtn').addEventListener('click', logout);
+
   const darkToggle = document.getElementById('darkModeToggle');
   darkToggle.addEventListener('change', () => {
     document.body.classList.toggle('dark', darkToggle.checked);
@@ -160,6 +170,13 @@ function showMainApp() {
   if (savedDark) {
     darkToggle.checked = true;
     document.body.classList.add('dark');
+  }
+
+  // Show quick task button and attach event
+  const quickBtn = document.getElementById('quickTaskBtn');
+  if (quickBtn) {
+    quickBtn.style.display = 'inline-flex';
+    quickBtn.onclick = () => showCreateTaskModal();
   }
 }
 
@@ -184,6 +201,11 @@ function attachNavEvents() {
       const page = link.dataset.page;
       document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
       link.classList.add('active');
+
+      const titleMap = { dashboard: 'Dashboard', projects: 'Projects', tasks: 'Tasks' };
+      const pageTitle = document.getElementById('pageTitle');
+      if (pageTitle) pageTitle.innerText = titleMap[page] || 'FlowTask';
+
       if (page === 'dashboard') loadDashboard();
       else if (page === 'projects') loadProjects();
       else if (page === 'tasks') loadTasks();
@@ -191,13 +213,24 @@ function attachNavEvents() {
   });
 }
 
-// ---------- Dashboard ----------
+// ---------- Dashboard (enhanced with progress, upcoming, recent) ----------
 async function loadDashboard() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="card">Loading dashboard...</div>';
   try {
     const data = await apiCall('/dashboard?_=' + Date.now());
     const { totalTasks, byStatus, perUser, overdue } = data;
+    const total = totalTasks;
+    const done = byStatus['Done'] || 0;
+    const progressPercent = total === 0 ? 0 : (done / total) * 100;
+
+    // Fetch all tasks for upcoming/recent widgets
+    const allTasks = await apiCall('/tasks');
+    const now = new Date();
+    const upcoming = allTasks.filter(t => new Date(t.dueDate) >= now && t.status !== 'Done')
+      .sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0,5);
+    const recent = allTasks.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,5);
+
     container.innerHTML = `
       <h2>Dashboard</h2>
       <div class="dashboard-stats">
@@ -207,14 +240,27 @@ async function loadDashboard() {
         <div class="stat-card"><h3>${byStatus['Done'] || 0}</h3><p>Done</p></div>
       </div>
       <div class="card">
+        <h3>Completion Progress</h3>
+        <div class="progress-container"><div class="progress-bar" style="width: ${progressPercent}%;"></div></div>
+        <p>${done} of ${total} tasks completed (${Math.round(progressPercent)}%)</p>
+      </div>
+      <div class="card">
         <h3>Tasks per User</h3>
         <ul>${perUser.map(u => `<li>${escapeHtml(u.user)}: ${u.count} tasks</li>`).join('')}</ul>
+      </div>
+      <div class="card">
+        <h3>Upcoming Tasks</h3>
+        ${upcoming.length === 0 ? '<p>No upcoming tasks 🎉</p>' : upcoming.map(t => `<div class="task-card"><strong>${escapeHtml(t.title)}</strong> - Due ${new Date(t.dueDate).toLocaleDateString()}</div>`).join('')}
+      </div>
+      <div class="card">
+        <h3>Recent Activity</h3>
+        ${recent.length === 0 ? '<p>No recent tasks</p>' : recent.map(t => `<div class="task-card"><strong>${escapeHtml(t.title)}</strong> - created ${new Date(t.createdAt).toLocaleDateString()}</div>`).join('')}
       </div>
       <div class="card">
         <h3>Overdue Tasks</h3>
         ${overdue.length === 0 ? '<p>None 🎉</p>' : overdue.map(t => `<div class="task-card overdue-task"><strong>${escapeHtml(t.title)}</strong> - Due ${new Date(t.dueDate).toLocaleDateString()}</div>`).join('')}
       </div>
-      <div style="text-align: center; margin-top: 2rem;">
+      <div style="text-align: center; margin-top: 1rem;">
         <button class="btn-secondary" onclick="loadDashboard()">⟳ Refresh Dashboard</button>
       </div>
     `;
@@ -223,7 +269,7 @@ async function loadDashboard() {
   }
 }
 
-// ---------- Project Cards ----------
+// ---------- Projects (member chips) ----------
 async function loadProjects() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="loading-spinner">Loading projects...</div>';
@@ -251,7 +297,7 @@ async function loadProjects() {
       const members = await apiCall(`/projects/${p.id}/members`);
       const adminMember = members.find(m => m.role === 'Admin');
       const otherMembers = members.filter(m => m.role !== 'Admin');
-      const currentUserIsAdmin = members.some(m => m.id === currentUser?.id && m.role === 'Admin');
+      const currentUserIsAdmin = members.some(m => m.userId === currentUser?.id && m.role === 'Admin');
 
       html += `
         <div class="project-card">
@@ -267,14 +313,12 @@ async function loadProjects() {
           <div class="project-admin">
             <strong>Admin:</strong> ${escapeHtml(adminMember?.name || 'Unknown')}
           </div>
-          ${otherMembers.length > 0 ? `
-            <div class="project-members">
-              <strong>Members (${otherMembers.length}):</strong>
-              <div class="member-chips">
-                ${otherMembers.map(m => `<span class="member-chip">${escapeHtml(m.name)}</span>`).join('')}
-              </div>
+          <div class="project-members">
+            <strong>Members (${otherMembers.length}):</strong>
+            <div class="member-chips">
+              ${otherMembers.map(m => `<span class="member-chip">${escapeHtml(m.name)}</span>`).join('')}
             </div>
-          ` : '<div class="project-members"><em>No additional members</em></div>'}
+          </div>
           <button class="btn-secondary add-member-btn" data-id="${p.id}">+ Add Member</button>
         </div>
       `;
@@ -374,7 +418,7 @@ window.showAddMemberModal = async function(projectId) {
   });
 };
 
-// ---------- Tasks with Member Dropdown (no manual ID) ----------
+// ---------- Tasks with Edit/Delete Icons and Enhanced UI ----------
 async function loadTasks() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="card">Loading tasks...</div>';
@@ -388,37 +432,114 @@ async function loadTasks() {
       </div>
       <div>
         ${tasks.length === 0 ? '<p>No tasks yet.</p>' : tasks.map(t => `
-          <div class="task-card priority-${t.priority.toLowerCase()}">
-            <strong>${escapeHtml(t.title)}</strong> (${t.status})<br>
-            <small>Project: ${escapeHtml(t.project.name)} | Assigned to: ${escapeHtml(t.assignee.name)} | Due: ${new Date(t.dueDate).toLocaleDateString()}</small><br>
-            <select onchange="updateTaskStatus(${t.id}, this.value)">
-              <option ${t.status === 'To Do' ? 'selected' : ''}>To Do</option>
-              <option ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
-              <option ${t.status === 'Done' ? 'selected' : ''}>Done</option>
-            </select>
+          <div class="task-card priority-${t.priority.toLowerCase()}" id="task-${t.id}">
+            <div class="task-info">
+              <strong>${escapeHtml(t.title)}</strong> (${t.status})<br>
+              <small>Project: ${escapeHtml(t.project.name)} | Assigned to: ${escapeHtml(t.assignee.name)} | Due: ${new Date(t.dueDate).toLocaleDateString()}</small>
+            </div>
+            <div class="task-actions">
+              <select onchange="updateTaskStatus(${t.id}, this.value)" class="status-select">
+                <option ${t.status === 'To Do' ? 'selected' : ''}>To Do</option>
+                <option ${t.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+                <option ${t.status === 'Done' ? 'selected' : ''}>Done</option>
+              </select>
+              <button class="edit-task" onclick="editTask(${t.id})"><i class="fas fa-edit"></i></button>
+              <button class="delete-task" onclick="deleteTask(${t.id})"><i class="fas fa-trash"></i></button>
+            </div>
           </div>
         `).join('')}
       </div>
     `;
-    window.updateTaskStatus = async (taskId, newStatus) => {
-      try {
-        await apiCall(`/tasks/${taskId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: newStatus })
-        });
-        showToast(`Task status updated to ${newStatus}`, 'success');
-        loadTasks();
-        loadDashboard();
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
-    };
+    window.updateTaskStatus = updateTaskStatus;
+    window.editTask = editTask;
+    window.deleteTask = deleteTask;
+    window.showCreateTaskModal = showCreateTaskModal;
   } catch (err) {
     container.innerHTML = `<div class="card error">Error: ${err.message}</div>`;
   }
 }
 
-// ------------- FIXED: Task Creation with Member Dropdown -------------
+async function updateTaskStatus(taskId, newStatus) {
+  try {
+    await apiCall(`/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus })
+    });
+    showToast(`Task status updated to ${newStatus}`, 'success');
+    loadTasks();
+    loadDashboard();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('Are you sure you want to delete this task permanently?')) return;
+  try {
+    await apiCall(`/tasks/${taskId}`, { method: 'DELETE' });
+    showToast('Task deleted successfully', 'success');
+    loadTasks();
+    loadDashboard();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function editTask(taskId) {
+  try {
+    // Fetch current task details
+    const tasks = await apiCall('/tasks');
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) throw new Error('Task not found');
+    const projects = await apiCall('/projects');
+    let projectOptions = '';
+    projects.forEach(p => {
+      projectOptions += `<option value="${p.id}" ${p.id === task.projectId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`;
+    });
+    const bodyHtml = `
+      <select id="editProjectId">${projectOptions}</select>
+      <input id="editTitle" value="${escapeHtml(task.title)}" placeholder="Title" required>
+      <textarea id="editDesc" rows="2" placeholder="Description">${escapeHtml(task.description || '')}</textarea>
+      <input type="date" id="editDueDate" value="${task.dueDate.slice(0,10)}" required>
+      <select id="editPriority">
+        <option ${task.priority === 'Low' ? 'selected' : ''}>Low</option>
+        <option ${task.priority === 'Medium' ? 'selected' : ''}>Medium</option>
+        <option ${task.priority === 'High' ? 'selected' : ''}>High</option>
+      </select>
+      <select id="editStatus">
+        <option ${task.status === 'To Do' ? 'selected' : ''}>To Do</option>
+        <option ${task.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+        <option ${task.status === 'Done' ? 'selected' : ''}>Done</option>
+      </select>
+      <div class="modal-footer">
+        <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
+        <button class="btn-modal btn-primary" id="modalConfirmBtn">Update</button>
+      </div>
+    `;
+    openModal('Edit Task', bodyHtml, async () => {
+      const updated = {
+        title: document.getElementById('editTitle').value,
+        description: document.getElementById('editDesc').value,
+        dueDate: document.getElementById('editDueDate').value,
+        priority: document.getElementById('editPriority').value,
+        status: document.getElementById('editStatus').value,
+        projectId: parseInt(document.getElementById('editProjectId').value)
+      };
+      try {
+        await apiCall(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(updated) });
+        showToast('Task updated successfully', 'success');
+        loadTasks();
+        loadDashboard();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ---------- Task Creation Modal (Member Dropdown) ----------
 window.showCreateTaskModal = async function() {
   try {
     const projects = await apiCall('/projects');
@@ -502,7 +623,7 @@ window.showCreateTaskModal = async function() {
         memberSelect.innerHTML = '<option value="">-- Select member --</option>';
         members.forEach(m => {
           const option = document.createElement('option');
-          option.value = m.id;   // must be user id (not membership id)
+          option.value = m.id;
           option.textContent = `${escapeHtml(m.name)} (${m.role})`;
           memberSelect.appendChild(option);
         });
@@ -520,7 +641,6 @@ window.showCreateTaskModal = async function() {
     projectSelect.addEventListener('change', () => {
       loadMembersForProject(projectSelect.value);
     });
-
   } catch (err) {
     showToast(err.message, 'error');
   }

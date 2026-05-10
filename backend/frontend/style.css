@@ -327,7 +327,7 @@ body.dark .btn-secondary:hover {
   margin-top: 0.5rem;
 }
 
-/* Modal styles (from previous updates) */
+/* Modal styles */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0;
@@ -427,5 +427,178 @@ body.dark .modal-body input, body.dark .modal-body select, body.dark .modal-body
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* ========== NEW ENHANCEMENTS (Glassmorphism, Profile, Floating Header, Progress, Task Actions) ========== */
+
+/* Glassmorphism for auth card and sidebar */
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+body.dark .glass-card {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.glass-sidebar {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+body.dark .glass-sidebar {
+  background: rgba(30, 41, 59, 0.8);
+}
+
+/* Logo badge */
+.logo-area .badge {
+  background: #4f46e5;
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 40px;
+  margin-left: 0.5rem;
+}
+
+/* User Profile in Sidebar */
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: rgba(79, 70, 229, 0.1);
+  margin-bottom: 0.5rem;
+}
+.user-avatar i {
+  font-size: 2rem;
+  color: #4f46e5;
+}
+.user-info .user-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.user-info .user-email {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+body.dark .user-profile {
+  background: rgba(79, 70, 229, 0.2);
+}
+
+/* Floating Header */
+.floating-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.quick-task-btn {
+  gap: 0.5rem;
+  background: #4f46e5;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.2rem;
+  border-radius: 2rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.quick-task-btn:hover {
+  background: #4338ca;
+  transform: translateY(-2px);
+}
+
+/* Progress Bar */
+.progress-container {
+  margin-top: 0.5rem;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: #4f46e5;
+  width: 0%;
+  border-radius: 10px;
+  transition: width 0.3s;
+}
+body.dark .progress-container {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Task Action Buttons (Edit/Delete) */
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.task-actions button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: color 0.2s;
+}
+.task-actions button.edit-task {
+  color: #f59e0b;
+}
+.task-actions button.delete-task {
+  color: #ef4444;
+}
+.task-actions button.edit-task:hover {
+  color: #d97706;
+}
+.task-actions button.delete-task:hover {
+  color: #dc2626;
+}
+/* Adjust task card for flexible layout */
+.task-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.task-info {
+  flex: 1;
+}
+/* Status select inline */
+.status-select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+}
+body.dark .status-select {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 80px;
+    padding: 1rem 0.5rem;
+  }
+  .logo-area h2, .user-profile, nav a span, .theme-toggle i:first-child, .theme-toggle i:last-child {
+    display: none;
+  }
+  .main-content {
+    margin-left: 80px;
+  }
+  .task-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .task-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

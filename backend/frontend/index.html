@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FlowTask | Team Task Manager</title>
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
   <div id="app">
-    <!-- Auth Screen -->
+    <!-- Auth Screen (Glassmorphic) -->
     <div id="auth-screen" class="auth-container">
-      <div class="auth-card">
+      <div class="auth-card glass-card">
+        <div class="logo-badge">✨ FlowTask Pro</div>
         <h1><i class="fas fa-tasks"></i> FlowTask</h1>
         <div class="auth-tabs">
           <button class="tab-btn active" data-tab="login">Login</button>
@@ -33,10 +34,24 @@
       </div>
     </div>
 
-    <!-- Main App -->
+    <!-- Main App (Glass Sidebar + Floating Header) -->
     <div id="main-app" style="display:none">
-      <div class="sidebar">
-        <div class="logo-area"><i class="fas fa-tasks"></i><h2>FlowTask</h2></div>
+      <div class="sidebar glass-sidebar">
+        <div class="logo-area">
+          <i class="fas fa-tasks"></i>
+          <h2>FlowTask</h2>
+          <span class="badge">Pro</span>
+        </div>
+        <!-- User Profile Section -->
+        <div class="user-profile" id="userProfile">
+          <div class="user-avatar">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          <div class="user-info">
+            <div class="user-name" id="userName">Loading...</div>
+            <div class="user-email" id="userEmail">loading@example.com</div>
+          </div>
+        </div>
         <nav>
           <a href="#" data-page="dashboard" class="active"><i class="fas fa-chart-line"></i> Dashboard</a>
           <a href="#" data-page="projects"><i class="fas fa-folder"></i> Projects</a>
@@ -50,21 +65,26 @@
         <button id="logoutBtn" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</button>
       </div>
       <div class="main-content">
+        <!-- Floating Header with Quick Task Button -->
+        <div class="floating-header">
+          <h1 id="pageTitle">Dashboard</h1>
+          <button id="quickTaskBtn" class="btn-primary quick-task-btn" style="display:none">
+            <i class="fas fa-plus"></i> Quick Task
+          </button>
+        </div>
         <div id="page-content"></div>
       </div>
     </div>
   </div>
 
-  <!-- Custom Modal Overlay (for attractive popups) -->
+  <!-- Custom Modal Overlay (Glassmorphic) -->
   <div id="modalOverlay" class="modal-overlay" style="display:none">
-    <div class="modal-container">
+    <div class="modal-container glass-card">
       <div class="modal-header">
         <h3 id="modalTitle">Modal Title</h3>
         <button class="modal-close" onclick="closeModal()">&times;</button>
       </div>
-      <div class="modal-body" id="modalBody">
-        <!-- dynamic content will be injected here -->
-      </div>
+      <div class="modal-body" id="modalBody"></div>
     </div>
   </div>
 
