@@ -191,12 +191,11 @@ function attachNavEvents() {
   });
 }
 
-// ---------- Dashboard (with cache-bust & refresh button) ----------
+// ---------- Dashboard ----------
 async function loadDashboard() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="card">Loading dashboard...</div>';
   try {
-    // Add a timestamp to avoid caching
     const data = await apiCall('/dashboard?_=' + Date.now());
     const { totalTasks, byStatus, perUser, overdue } = data;
     container.innerHTML = `
@@ -224,7 +223,7 @@ async function loadDashboard() {
   }
 }
 
-// ---------- Professional Project Cards ----------
+// ---------- Project Cards ----------
 async function loadProjects() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="loading-spinner">Loading projects...</div>';
@@ -252,7 +251,7 @@ async function loadProjects() {
       const members = await apiCall(`/projects/${p.id}/members`);
       const adminMember = members.find(m => m.role === 'Admin');
       const otherMembers = members.filter(m => m.role !== 'Admin');
-      const currentUserIsAdmin = members.some(m => m.userId === currentUser?.id && m.role === 'Admin');
+      const currentUserIsAdmin = members.some(m => m.id === currentUser?.id && m.role === 'Admin');
 
       html += `
         <div class="project-card">
@@ -283,14 +282,12 @@ async function loadProjects() {
     html += `</div>`;
     container.innerHTML = html;
 
-    // Attach add member click events
     document.querySelectorAll('.add-member-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const projectId = parseInt(btn.dataset.id);
         showAddMemberModal(projectId);
       });
     });
-    // Attach delete project click events
     document.querySelectorAll('.delete-project-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -299,8 +296,8 @@ async function loadProjects() {
           try {
             await apiCall(`/projects/${projectId}`, { method: 'DELETE' });
             showToast('Project deleted successfully', 'success');
-            loadProjects(); // refresh
-            loadDashboard(); // update dashboard stats
+            loadProjects();
+            loadDashboard();
           } catch (err) {
             showToast(err.message, 'error');
           }
@@ -369,15 +366,15 @@ window.showAddMemberModal = async function(projectId) {
         body: JSON.stringify({ email, role })
       });
       showToast(`${email} added as ${role}`, 'success');
-      loadProjects(); 
-      loadDashboard(); // dashbo
+      loadProjects();
+      loadDashboard();
     } catch (err) {
       showToast(err.message, 'error');
     }
   });
 };
 
-// ---------- Tasks ----------
+// ---------- Tasks with Member Dropdown (no manual ID) ----------
 async function loadTasks() {
   const container = document.getElementById('page-content');
   container.innerHTML = '<div class="card">Loading tasks...</div>';
@@ -387,7 +384,7 @@ async function loadTasks() {
     container.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2>Tasks</h2>
-        <button class="btn-primary" onclick="showCreateTaskModal(${JSON.stringify(projects).replace(/"/g, '&quot;')})">+ New Task</button>
+        <button class="btn-primary" onclick="showCreateTaskModal()">+ New Task</button>
       </div>
       <div>
         ${tasks.length === 0 ? '<p>No tasks yet.</p>' : tasks.map(t => `
@@ -403,50 +400,6 @@ async function loadTasks() {
         `).join('')}
       </div>
     `;
-    window.showCreateTaskModal = (projectsArr) => {
-      let options = '';
-      projectsArr.forEach(p => {
-        options += `<option value="${p.id}">${escapeHtml(p.name)} (ID: ${p.id})</option>`;
-      });
-      const bodyHtml = `
-        <select id="taskProjectId">${options}</select>
-        <input type="text" id="taskTitle" placeholder="Task Title" required>
-        <textarea id="taskDesc" rows="2" placeholder="Description"></textarea>
-        <input type="date" id="taskDueDate" required>
-        <select id="taskPriority">
-          <option value="Low">Low</option>
-          <option value="Medium" selected>Medium</option>
-          <option value="High">High</option>
-        </select>
-        <input type="number" id="taskAssignedTo" placeholder="Assign to User ID (e.g., 1,2,3...)" required>
-        <div class="modal-footer">
-          <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
-          <button class="btn-modal btn-primary" id="modalConfirmBtn">Create Task</button>
-        </div>
-      `;
-      openModal('Create New Task', bodyHtml, async () => {
-        const projectId = document.getElementById('taskProjectId').value;
-        const title = document.getElementById('taskTitle').value.trim();
-        const description = document.getElementById('taskDesc').value;
-        const dueDate = document.getElementById('taskDueDate').value;
-        const priority = document.getElementById('taskPriority').value;
-        const assignedTo = parseInt(document.getElementById('taskAssignedTo').value);
-        if (!title || !dueDate || !assignedTo) {
-          return showToast('Please fill all required fields', 'error');
-        }
-        try {
-          await apiCall(`/tasks/project/${projectId}`, {
-            method: 'POST',
-            body: JSON.stringify({ title, description, dueDate, priority, assignedTo })
-          });
-          showToast('Task created successfully', 'success');
-          loadTasks();
-          loadDashboard();   // 🔄 Update dashboard stats
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-      });
-    };
     window.updateTaskStatus = async (taskId, newStatus) => {
       try {
         await apiCall(`/tasks/${taskId}`, {
@@ -455,7 +408,7 @@ async function loadTasks() {
         });
         showToast(`Task status updated to ${newStatus}`, 'success');
         loadTasks();
-        loadDashboard();     // 🔄 Force dashboard refresh
+        loadDashboard();
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -464,6 +417,114 @@ async function loadTasks() {
     container.innerHTML = `<div class="card error">Error: ${err.message}</div>`;
   }
 }
+
+// ------------- FIXED: Task Creation with Member Dropdown -------------
+window.showCreateTaskModal = async function() {
+  try {
+    const projects = await apiCall('/projects');
+    if (projects.length === 0) {
+      showToast('You need at least one project before creating a task.', 'error');
+      return;
+    }
+
+    let projectOptions = '';
+    projects.forEach(p => {
+      projectOptions += `<option value="${p.id}">${escapeHtml(p.name)}</option>`;
+    });
+
+    const bodyHtml = `
+      <div>
+        <label>Project:</label>
+        <select id="taskProjectId">${projectOptions}</select>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <label>Task Title:</label>
+        <input type="text" id="taskTitle" placeholder="Task Title" required>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <label>Description:</label>
+        <textarea id="taskDesc" rows="2" placeholder="Description"></textarea>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <label>Due Date:</label>
+        <input type="date" id="taskDueDate" required>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <label>Priority:</label>
+        <select id="taskPriority">
+          <option value="Low">Low</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="High">High</option>
+        </select>
+      </div>
+      <div style="margin-top: 0.75rem;">
+        <label>Assign to Member:</label>
+        <select id="taskAssignedTo" required>
+          <option value="">-- Select member --</option>
+        </select>
+      </div>
+      <div class="modal-footer" style="margin-top: 1rem;">
+        <button class="btn-modal btn-secondary" id="modalCancelBtn">Cancel</button>
+        <button class="btn-modal btn-primary" id="modalConfirmBtn">Create Task</button>
+      </div>
+    `;
+    openModal('Create New Task', bodyHtml, async () => {
+      const projectId = document.getElementById('taskProjectId').value;
+      const title = document.getElementById('taskTitle').value.trim();
+      const description = document.getElementById('taskDesc').value;
+      const dueDate = document.getElementById('taskDueDate').value;
+      const priority = document.getElementById('taskPriority').value;
+      const assignedTo = document.getElementById('taskAssignedTo').value;
+      if (!title || !dueDate || !assignedTo) {
+        return showToast('Please fill all required fields', 'error');
+      }
+      try {
+        await apiCall(`/tasks/project/${projectId}`, {
+          method: 'POST',
+          body: JSON.stringify({ title, description, dueDate, priority, assignedTo: parseInt(assignedTo) })
+        });
+        showToast('Task created successfully', 'success');
+        loadTasks();
+        loadDashboard();
+        closeModal();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const projectSelect = document.getElementById('taskProjectId');
+    const memberSelect = document.getElementById('taskAssignedTo');
+
+    async function loadMembersForProject(projectId) {
+      memberSelect.innerHTML = '<option value="">-- Loading members --</option>';
+      try {
+        const members = await apiCall(`/projects/${projectId}/members`);
+        memberSelect.innerHTML = '<option value="">-- Select member --</option>';
+        members.forEach(m => {
+          const option = document.createElement('option');
+          option.value = m.id;   // must be user id (not membership id)
+          option.textContent = `${escapeHtml(m.name)} (${m.role})`;
+          memberSelect.appendChild(option);
+        });
+        if (members.length === 0) {
+          memberSelect.innerHTML = '<option value="">-- No members in this project --</option>';
+          showToast('This project has no members. Add members first.', 'error');
+        }
+      } catch (err) {
+        memberSelect.innerHTML = '<option value="">-- Error loading members --</option>';
+        showToast('Failed to load members', 'error');
+      }
+    }
+
+    loadMembersForProject(projectSelect.value);
+    projectSelect.addEventListener('change', () => {
+      loadMembersForProject(projectSelect.value);
+    });
+
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
 
 // ---------- Auto-Login ----------
 const savedToken = localStorage.getItem('token');

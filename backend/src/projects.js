@@ -39,6 +39,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get all members of a specific project (with user details)
+// FIXED: returns user id as 'id' and also includes 'userId' field for compatibility
 router.get('/:id/members', async (req, res) => {
   const projectId = parseInt(req.params.id);
   const userId = req.userId;
@@ -52,9 +53,10 @@ router.get('/:id/members', async (req, res) => {
     where: { projectId },
     include: { user: { select: { id: true, name: true, email: true } } }
   });
-  // Format response: id, name, email, role
+  // Format response: id (user id), userId (same), name, email, role
   res.json(members.map(m => ({
-    id: m.id,
+    id: m.user.id,          // ✅ user id for dropdown value
+    userId: m.user.id,      // ✅ also provide as userId for compatibility
     name: m.user.name,
     email: m.user.email,
     role: m.role
@@ -89,7 +91,7 @@ router.delete('/:id/members/:userId', async (req, res) => {
   res.json({ message: 'Member removed' });
 });
 
-// ===== NEW: Delete a project (Admin only, cascades tasks & members) =====
+// Delete a project (Admin only, cascades tasks & members)
 router.delete('/:id', async (req, res) => {
   const projectId = parseInt(req.params.id);
   const userId = req.userId;
@@ -97,7 +99,6 @@ router.delete('/:id', async (req, res) => {
   if (userRole !== 'Admin') return res.status(403).json({ error: 'Forbidden' });
   
   try {
-    // Delete all tasks, project members, then the project itself
     await prisma.$transaction([
       prisma.task.deleteMany({ where: { projectId } }),
       prisma.projectMember.deleteMany({ where: { projectId } }),
